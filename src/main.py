@@ -93,6 +93,7 @@ async def load(guild: discord.Guild, file_name: Path):
     print("Load complete!")
 
 
+#не смотри сюда.
 @bot.command()
 async def Гыгы(ctx):
     print("ГЫГЫ!!!")
