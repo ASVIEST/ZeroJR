@@ -21,6 +21,7 @@ class ClearKind(StrEnum):
     THREADS = auto()
     CHANNELS = auto()
     CATEGORIES = auto()
+    EMOJIS = auto()
 
 
 intents = discord.Intents.all()  # Подключаем "Разрешения"
@@ -57,7 +58,7 @@ async def create(guild: discord.Guild):
     guild_obj = record.Guild(guild)
     await guild_obj.avisitor(guild)
     await asyncio.to_thread(dump, dtree=guild_obj)
-    
+
     end_time = time.time()
     print("Create complete!")
     print(f"Время выполнения: {end_time-start_time} секунд")
@@ -68,15 +69,19 @@ async def clear(guild: discord.Guild, clear_kind: ClearKind = ClearKind.ALL):
     if clear_kind in {ClearKind.ALL, ClearKind.THREADS}:
         for thread in guild.threads:
             await thread.delete()
-        print("Thread deletion is complete.")
+        print("Threads deletion is complete.")
     if clear_kind in {ClearKind.ALL, ClearKind.CHANNELS}:
         for channel in guild.channels:
             await channel.delete()
-        print("Channel deletion is complete.")
+        print("Channels deletion is complete.")
     if clear_kind in {ClearKind.ALL, ClearKind.CATEGORIES}:
         for category in guild.categories:
             await category.delete()
-        print("Category deletion is complete.")
+        print("Categories deletion is complete.")
+    if clear_kind in {ClearKind.ALL, ClearKind.EMOJIS}:
+        for emoji in guild.emojis:
+            await emoji.delete()
+        print("Emojis deletion is complete.")
 
 
 @my_console.command()
@@ -88,13 +93,10 @@ async def load(guild: discord.Guild, file_name: Path):
     print("Load complete!")
 
 
-#не смотри сюда.
+#Для проверки кусков кода, которые пугают Артёмов
 @bot.command()
 async def test(ctx):
-    #for emoji in ctx.guild.emojis:
-    #    inspect(requests.get(emoji.url).content)
-    img = requests.get(ctx.guild.emojis[0].url).content
-    await ctx.guild.create_custom_emoji(name = "Test", image = img)
+    pass
 
 
 dotenv.load_dotenv()
