@@ -2,6 +2,8 @@ from rich import inspect
 import discord
 from enum import Enum
 
+import requests
+
 class ThreadType(Enum):
     news_thread = 10
     public_thread = 11
@@ -242,5 +244,12 @@ class Category():
         return {"nsfw": self.nsfw}
 
 
-if __name__ == '__main__':
-    test_category = Category(None)
+class Guild():
+    name : str
+    emojis : list
+
+    def __init__(self, guild: discord.Guild):
+        self.name = guild.name
+        self.emojis = []
+        for emoji in guild.emojis:
+            self.emojis.append(requests.get(emoji.url).content)

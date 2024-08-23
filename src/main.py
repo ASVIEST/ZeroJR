@@ -14,6 +14,7 @@ import record
 import builder
 
 import aiohttp
+import requests
 
 class ClearKind(StrEnum):
     ALL = auto()
@@ -52,15 +53,18 @@ def dump(dtree):
 @my_console.command()
 async def create(guild: discord.Guild):
     start_time = time.time()
+    guild_obj = record.Guild(guild)
+
     category_list = []
     for category in guild.categories:
         category_obj = record.Category(category)
         await category_obj.avisitor(category)
         category_list.append(category_obj)
-    await asyncio.to_thread(dump, dtree=category_list)
+    await asyncio.to_thread(dump, dtree=(guild_obj, category_list))
     end_time = time.time()
     print("Create complete!")
     print(f"Время выполнения: {end_time-start_time} секунд")
+    inspect(guild_obj)
 
 
 @my_console.command()
@@ -92,7 +96,10 @@ async def load(guild: discord.Guild, file_name: Path):
 #не смотри сюда.
 @bot.command()
 async def test(ctx):
-    pass
+    #for emoji in ctx.guild.emojis:
+    #    inspect(requests.get(emoji.url).content)
+    img = requests.get(ctx.guild.emojis[0].url).content
+    await ctx.guild.create_custom_emoji(name = "Test", image = img)
 
 
 dotenv.load_dotenv()
