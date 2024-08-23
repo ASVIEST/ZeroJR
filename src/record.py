@@ -100,7 +100,6 @@ class Thread():
     archived : bool
     type : ThreadType
     members_id : list[int]
-    #id : int
 
     def __init__(self, thread: discord.Thread):
         self.invitable = thread.invitable
@@ -111,7 +110,6 @@ class Thread():
         self.auto_archive_duration = thread.auto_archive_duration
         self.type = ThreadType(thread.type.value)
         self.members_id = []
-        #self.id = thread.id
 
     #см. avisitor ниже
     async def avisitor(self, thread : discord.Thread):
@@ -131,7 +129,6 @@ class Thread():
 
 class VoiceChannel():
     bitrate : int
-    #id : int
     name : str
     slowmode_delay : int
     user_limit : int
@@ -141,7 +138,6 @@ class VoiceChannel():
 
     def __init__(self, channel: discord.VoiceChannel):
         self.bitrate = channel.bitrate
-        #self.id = channel.id
         self.name = channel.name
         self.slowmode_delay = channel.slowmode_delay
         self.user_limit = channel.user_limit
@@ -182,7 +178,6 @@ class TextChannel():
     slowmode_delay : int
     threads : list[Thread]
     topic : str
-    #id : int
 
     history : History
 
@@ -197,7 +192,6 @@ class TextChannel():
         for i in channel.threads:
             thrd = Thread(i)
             self.threads.append(thrd)
-        #self.id = channel.id
 
         self.history = History()
     
@@ -219,7 +213,6 @@ class TextChannel():
 
 class Category():
     channels : list[TextChannel | VoiceChannel]
-    #id : int
     name : str
     nsfw : bool
     position : int
@@ -227,7 +220,6 @@ class Category():
                          discord.VoiceChannel: VoiceChannel}
 
     def __init__(self, category: discord.CategoryChannel):
-        #self.id = category.id
         self.name = category.name
         self.nsfw = category.nsfw
         self.position = category.position

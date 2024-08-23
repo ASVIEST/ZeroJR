@@ -98,7 +98,8 @@ class CategoryBuilder(Builder):
 
     async def build(self, guild: discord.Guild):
         print("CategoryBuilder build()")
-        # Если Дискорд начнёт умирать - убери position из класса Категории
+        # Если Дискорд начнёт умирать - убери position из класса Категории.
+        # Оно работает, не трогай...
         new_category_channel = await guild.create_category_channel(self.category.name, position = self.category.position)
         await new_category_channel.edit(** self.category.as_dict())
 

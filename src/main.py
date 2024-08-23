@@ -65,7 +65,6 @@ async def create(guild: discord.Guild):
 
 @my_console.command()
 async def clear(guild: discord.Guild, clear_kind: ClearKind = ClearKind.ALL):
-    #Все или только один
     if clear_kind in {ClearKind.ALL, ClearKind.THREADS}:
         for thread in guild.threads:
             await thread.delete()
