@@ -34,13 +34,13 @@ my_console = Console(bot)
 
 #Эта шиза снизу для распознавания консолью всякой шизы вроде ClearKind
 def path_convert(param):
-    return Path(param) # What the fuck?
-my_console.converter.add_converter(Path, path_convert)
+    return Path(param)
+my_console.converter.add_converter(Path, path_convert) # What the fuck?
 
 
 def clear_kind_convert(param):
-    return ClearKind(param) # What the fuck?
-my_console.converter.add_converter(ClearKind, clear_kind_convert)
+    return ClearKind(param)
+my_console.converter.add_converter(ClearKind, clear_kind_convert) # What the fuck?
 
 
 def dump(dtree):
@@ -57,9 +57,6 @@ async def create(guild: discord.Guild):
         category_obj = record.Category(category)
         await category_obj.avisitor(category)
         category_list.append(category_obj)
-        for channel in category.text_channels:
-            for i in channel.threads:
-                inspect(i)
     await asyncio.to_thread(dump, dtree=category_list)
     end_time = time.time()
     print("Create complete!")
@@ -95,13 +92,8 @@ async def load(guild: discord.Guild, file_name: Path):
 
 #не смотри сюда.
 @bot.command()
-async def Гыгы(ctx):
-    print("ГЫГЫ!!!")
-    webhook = await ctx.message.channel.create_webhook(name = ctx.author.display_name)
-    async with ctx.typing():
-        await webhook.send('Hello World', avatar_url=ctx.author.display_avatar.url)
-    await webhook.delete()
-    inspect(webhook)
+async def test(ctx):
+    pass
 
 
 dotenv.load_dotenv()
