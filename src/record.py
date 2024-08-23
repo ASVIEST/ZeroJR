@@ -244,12 +244,33 @@ class Category():
         return {"nsfw": self.nsfw}
 
 
+class Emoji():
+    name : str
+    data : bytes
+
+    def __init__(self, _name, _data):
+        self.name = _name
+        self.data = _data
+
+
 class Guild():
     name : str
-    emojis : list
+    emojis : list[Emoji]
+    categories : list[Category]
 
     def __init__(self, guild: discord.Guild):
         self.name = guild.name
         self.emojis = []
         for emoji in guild.emojis:
-            self.emojis.append(requests.get(emoji.url).content)
+            self.emojis.append(Emoji(emoji.name, requests.get(emoji.url).content))
+        self.categories = []
+        
+    async def avisitor(self, guild : discord.Guild):
+        print("Guild avisitor()")
+        for category in guild.categories:
+            category_obj = Category(category)
+            await category_obj.avisitor(category)
+            self.categories.append(category_obj)
+    
+    def as_dict(self):
+        return {"name": self.name}

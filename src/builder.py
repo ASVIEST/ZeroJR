@@ -109,3 +109,19 @@ class CategoryBuilder(Builder):
         for channel in self.category.channels:
             builder = CHANNEL_BUILDER[type(channel)](channel, self.bot)
             await builder.build(guild, new_category_channel)
+
+class GuildBuilder(Builder):
+    def __init__(self, guild: record.Guild, bot: commands.Bot):
+        self.bot = bot
+        self.guild = guild
+    
+    async def build(self, guild: discord.Guild):
+
+        await guild.edit(** self.guild.as_dict())
+
+        for emoji in self.guild.emojis:
+            await guild.create_custom_emoji(name = emoji.name, image = emoji.data)
+
+        for category in self.guild.categories:
+            builder = CategoryBuilder(category, self.bot)
+            await builder.build(guild)

@@ -53,18 +53,14 @@ def dump(dtree):
 @my_console.command()
 async def create(guild: discord.Guild):
     start_time = time.time()
-    guild_obj = record.Guild(guild)
 
-    category_list = []
-    for category in guild.categories:
-        category_obj = record.Category(category)
-        await category_obj.avisitor(category)
-        category_list.append(category_obj)
-    await asyncio.to_thread(dump, dtree=(guild_obj, category_list))
+    guild_obj = record.Guild(guild)
+    await guild_obj.avisitor(guild)
+    await asyncio.to_thread(dump, dtree=guild_obj)
+    
     end_time = time.time()
     print("Create complete!")
     print(f"Время выполнения: {end_time-start_time} секунд")
-    inspect(guild_obj)
 
 
 @my_console.command()
@@ -86,10 +82,9 @@ async def clear(guild: discord.Guild, clear_kind: ClearKind = ClearKind.ALL):
 @my_console.command()
 async def load(guild: discord.Guild, file_name: Path):
     with open(file_name, "rb") as file:
-        category_list = pickle.load(file)
-    for category in category_list:
-        category_builder = builder.CategoryBuilder(category, bot)
-        await category_builder.build(guild)
+        guild_from_file = pickle.load(file)
+    guild_builder = builder.GuildBuilder(guild_from_file, bot)
+    await guild_builder.build(guild)
     print("Load complete!")
 
 
