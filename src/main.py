@@ -12,9 +12,12 @@ import time
 
 import record
 import builder
+from discord2record import conv_guild
 
 import aiohttp
 import requests
+
+import gen_record
 
 class ClearKind(StrEnum):
     ALL = auto()
@@ -53,10 +56,13 @@ def dump(dtree):
 
 @my_console.command()
 async def create(guild: discord.Guild):
+    
     start_time = time.time()
-
-    guild_obj = record.Guild(guild)
-    await guild_obj.avisitor(guild)
+    print('ok')
+    gen = gen_record.GuildGen()
+    guild_obj = await (await conv_guild(guild, gen)).get_result()
+    
+    print(guild_obj)
     await asyncio.to_thread(dump, dtree=guild_obj)
 
     end_time = time.time()
@@ -92,6 +98,42 @@ async def load(guild: discord.Guild, file_name: Path):
     await guild_builder.build(guild)
     print("Load complete!")
 
+@my_console.command()
+async def test_gen(guild: discord.Guild):
+    async def msg1(gen):
+        return (
+            gen
+            .with_content("Hello world!")
+        )
+
+    async def history(gen):
+        return (
+            gen
+            .with_message(msg1)
+        )
+    async def chan(gen):
+        return (
+            gen
+            .with_name("test_chan")
+            .with_history(history)
+        )
+    async def category(gen):
+        return (
+            gen
+            .with_name("test")
+            .with_text_channel(chan)
+        )
+    print("start")
+    guild_record = await (
+        gen_record.GuildGen()
+        .with_name("guild_name")
+        .with_category(category)
+    ).get_result()
+    print("tree initilized!")
+    print(guild_record)
+    guild_builder = builder.GuildBuilder(guild_record, bot)
+    await guild_builder.build(guild)
+    print("test tree building complete!")
 
 #Для проверки кусков кода, которые пугают Артёмов
 @bot.command()

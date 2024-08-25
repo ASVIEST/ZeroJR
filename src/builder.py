@@ -51,11 +51,10 @@ class ThreadBuilder(Builder):
         self.bot = bot
         self.thread = thread
 
-
     async def build(self, channel: discord.TextChannel):
         print("ThreadBuilder build()")
         new_thread = await channel.create_thread(name = self.thread.name, type = discord.ChannelType(self.thread.type.value))
-        await new_thread.edit(** self.thread.as_dict())
+        # await new_thread.edit(** self.thread.as_dict())
         for user_id in self.thread.members_id:
             user = channel.guild.get_member(user_id)
             if user != None:
@@ -66,22 +65,41 @@ class VoiceChannelBuilder(Builder):
     def __init__(self, channel: record.VoiceChannel, bot: commands.Bot):
         self.bot = bot
         self.channel = channel
+    
+    def _get_edits(self):
+        d = asdict(self.channel)
+        USED = {
+            # nothing currently
+        }
+        return {key: d[key] for key in USED}
 
     async def build(self, guild: discord.Guild, category: discord.CategoryChannel):
         print("VoiceChannelBuilder build()")
         new_voice_channel = await guild.create_voice_channel(self.channel.name, category = category) #type = discord.ChannelType(self.channel.type.value))
-        await new_voice_channel.edit(** self.channel.as_dict())
+        # await new_voice_channel.edit(** self.channel.as_dict())
 
 
 class TextChannelBuilder(Builder):
     def __init__(self, channel: record.TextChannel, bot: commands.Bot):
         self.bot = bot
         self.channel = channel
+    
+    def _get_edits(self):
+        d = asdict(self.guild)
+        USED = {
+            "default_auto_archive_duration",
+            "default_thread_slowmode_delay",
+            "nsfw",
+            "slowmode_delay",
+            "topic"
+        }
+        return {key: d[key] for key in USED}
+
 
     async def build(self, guild: discord.Guild, category: discord.CategoryChannel):
         print("TextChannelBuilder build()")
         new_text_channel = await guild.create_text_channel(self.channel.name, category = category)
-        await new_text_channel.edit(** self.channel.as_dict())
+        # await new_text_channel.edit(** self._get_edits())
     
         for thread in self.channel.threads:
             builder = ThreadBuilder(thread, self.bot)
@@ -96,12 +114,16 @@ class CategoryBuilder(Builder):
         self.bot = bot
         self.category = category
 
+    def _get_edits(self):
+        return {"nsfw": self.guild.nsfw}
+
+
     async def build(self, guild: discord.Guild):
         print("CategoryBuilder build()")
         # Если Дискорд начнёт умирать - убери position из класса Категории.
         # Оно работает, не трогай...
         new_category_channel = await guild.create_category_channel(self.category.name, position = self.category.position)
-        await new_category_channel.edit(** self.category.as_dict())
+        # await new_category_channel.edit(** self.category.as_dict())
 
         CHANNEL_BUILDER = {record.TextChannel: TextChannelBuilder,
                          record.VoiceChannel: VoiceChannelBuilder}
@@ -110,17 +132,22 @@ class CategoryBuilder(Builder):
             builder = CHANNEL_BUILDER[type(channel)](channel, self.bot)
             await builder.build(guild, new_category_channel)
 
+from dataclasses import asdict
 class GuildBuilder(Builder):
     def __init__(self, guild: record.Guild, bot: commands.Bot):
         self.bot = bot
         self.guild = guild
     
+    def _get_edits(self):
+        return {"name": self.guild.name}
+
     async def build(self, guild: discord.Guild):
+        print("GuildBuilder build()")
+        print(self.guild)
+        await guild.edit(** self._get_edits())
 
-        await guild.edit(** self.guild.as_dict())
-
-        for emoji in self.guild.emojis:
-            await guild.create_custom_emoji(name = emoji.name, image = emoji.data)
+        # for emoji in self.guild.emojis:
+        #     await guild.create_custom_emoji(name = emoji.name, image = emoji.data)
 
         for category in self.guild.categories:
             builder = CategoryBuilder(category, self.bot)
