@@ -65,7 +65,7 @@ async def create(guild: discord.Guild):
     gen = gen_record.GuildGen()
     gen = await GuildConverter(guild).convert(gen)
     guild_obj = await gen.get_result()
-
+    print(guild_obj)
     await asyncio.to_thread(dump, dtree=guild_obj)
 
     end_time = time.time()
@@ -120,11 +120,19 @@ async def test_gen(guild: discord.Guild):
             .with_text_channel(alambda(lambda gen: (
                 gen
                 .with_name("test_chan")
+                .with_thread(alambda(lambda gen: (
+                    gen.
+                    with_name("Channel thread")
+                )))
                 .with_history(alambda(lambda gen: (
                     gen
                     .with_message(alambda(lambda gen: (
                         gen
                         .with_content("Hello world!")
+                        .with_thread(alambda(lambda gen: (
+                            gen
+                            .with_name("Message thread")
+                        )))
                     )))
                 )))
             )))

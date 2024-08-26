@@ -17,6 +17,7 @@ class Converter:
 class MessagePayload:
     content: str
     author: discord.Member
+    thread: discord.Thread | None = None
 
 @dataclass(eq = True)
 class MessageAuthorPayload:
@@ -38,17 +39,38 @@ def message_author_payload(author: discord.Member):
 def can_combine(a: discord.Member, b: discord.Member):
     return message_author_payload(a) == message_author_payload(b)
 
+class ThreadConverter(Converter):
+    def __init__(self, thread: discord.Thread):
+        self._thread = thread
+    
+    async def convert(self, gen):
+        print("ThreadConverter")
+        await self._thread.fetch_members()
+        await (
+            gen
+            .with_name(self._thread.name)
+        )
+        for member in self._thread.members:
+            await gen.with_member_id(member.id)
+        
+        return gen
+
 class MessageConverter(Converter):
     def __init__(self, message: MessagePayload):
         self._message = message
     
     async def convert(self, gen):
-        return await (
+        await (
             gen
             .with_display_name(self._message.author.display_name)
             .with_display_avatar_url(self._message.author.display_avatar.url)
             .with_content(self._message.content)
         )
+
+        if self._message.thread != None:
+            await gen.with_thread(ThreadConverter(self._message.thread).gen_func)
+        
+        return gen
 
 MAX_MESSAGE_LEN = 2000
 
@@ -56,6 +78,14 @@ class HistoryConverter(Converter):
     def __init__(self, history):
         self._history = history # save async iterator
     
+    async def skip_channel_thread_messages(self, history):
+        # discord history может видеть некоторые системные сообщения, 
+        # например, потоки без связанных сообщений,
+        # это мешает создать правильное дерево
+        async for message in history:
+            if message.type != discord.MessageType.thread_created:
+                yield message
+
     async def combine_messages(self, history):
         cnt = 0
         old_msg = ""
@@ -64,23 +94,26 @@ class HistoryConverter(Converter):
         async for message in history:
             msg = message.content
             author = message.author
+            thread = message.thread
             len_ = len(msg)
             cnt = cnt + len_ + 1
-
+            
             if (
-                cnt <= MAX_MESSAGE_LEN and 
+                cnt <= MAX_MESSAGE_LEN and
                 old_author != None and 
+                thread == None and
                 can_combine(old_author, author)
             ): msg = old_msg + '\n' + msg
             else:
                 if old_author != None:
-                  yield MessagePayload(old_msg, old_author)
+                  yield MessagePayload(old_msg, old_author, old_thread)
                 cnt = len_
             
             old_msg = msg
             old_author = author
+            old_thread = thread
 
-        yield MessagePayload(msg, author)
+        yield MessagePayload(msg, author, thread)
     
     async def skip_empty_messages(self, history):
         async for message in history:
@@ -89,27 +122,29 @@ class HistoryConverter(Converter):
 
     async def convert(self, gen):
         print("HistoryConverter")
-        async for message in self.skip_empty_messages(self.combine_messages(self._history)):
+        async for message in self.skip_empty_messages(self.combine_messages(self.skip_channel_thread_messages(self._history))):
             await gen.with_message(MessageConverter(message).gen_func)
         
         return gen
 
-class ThreadConverter(Converter):
-    def __init__(self, thread: discord.Thread):
-        self._thread = thread
-    
-    async def convert(self, gen):
-        print("ThreadConverter")
-        await self._thread.fetch_members()
-        for member in self._thread.members:
-            await gen.with_member_id(member.id)
-        
-        return gen
 
 class TextChannelConverter(Converter):
     def __init__(self, channel: discord.TextChannel):
         self._channel = channel
     
+    async def _is_message_thread(self, thread: discord.Thread):
+        # thread.starting_message не работает, 
+        # поэтому кажется, что это единственный способ проверить его 
+        # (если только не проверять все сообщения на наличие свойства thread)
+        try:
+            msg = await self._channel.fetch_message(thread.id)
+            if msg.type == discord.MessageType.thread_created:
+                return False
+            else:
+                return True
+        except discord.NotFound:
+            return False
+
     async def convert(self, gen):
         print("TextChannelConverter")
         await (
@@ -119,7 +154,8 @@ class TextChannelConverter(Converter):
             .with_history(HistoryConverter(self._channel.history(limit = None, oldest_first=True)).gen_func)
         )
         for thread in self._channel.threads:
-            if thread.starting_message == None:
+            if not(await self._is_message_thread(thread)):
+                print(thread.starting_message)
                 await gen.with_thread(ThreadConverter(thread).gen_func)
         return gen
 

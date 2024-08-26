@@ -27,7 +27,18 @@ class MessageBuilder(Builder):
     async def build(self, channel: discord.TextChannel, webhook: discord.Webhook):
         print("MessageBuilder build()")
         async with channel.typing():
-            await webhook.send(self.message.content, username= self.message.display_name, avatar_url= self.message.display_avatar_url)
+            have_thread = self.message.thread != None
+            message = await webhook.send(
+                self.message.content, 
+                username = self.message.display_name, 
+                avatar_url = self.message.display_avatar_url,
+                wait = have_thread
+            )
+            if have_thread:
+                print("message.thread")
+                builder = ThreadBuilder(self.message.thread, self.bot)
+                await builder.build(message)
+        print("End of build")
 
 
 class HistoryBuilder(Builder):
@@ -51,15 +62,23 @@ class ThreadBuilder(Builder):
         self.bot = bot
         self.thread = thread
 
-    async def build(self, channel: discord.TextChannel):
+    async def build(self, obj: discord.TextChannel | discord.Message):
         print("ThreadBuilder build()")
-        new_thread = await channel.create_thread(name = self.thread.name, type = discord.ChannelType(self.thread.type.value))
+        match obj:
+            case discord.TextChannel(): 
+                new_thread = await obj.create_thread(
+                    name = self.thread.name,
+                    type = discord.ChannelType(self.thread.type.value)
+                )
+            case discord.Message():
+                new_thread = await obj.create_thread(name = self.thread.name)
+            case _: print("Unexpected object type for generating thread")
+        
         # await new_thread.edit(** self.thread.as_dict())
         for user_id in self.thread.members_id:
-            user = channel.guild.get_member(user_id)
+            user = obj.guild.get_member(user_id)
             if user != None:
                 await new_thread.add_user(user)
-
 
 class VoiceChannelBuilder(Builder):
     def __init__(self, channel: record.VoiceChannel, bot: commands.Bot):
