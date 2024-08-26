@@ -72,6 +72,7 @@ class ThreadGen:
     _archived : bool
     _type : record.ThreadType
     _members_id : list[int]
+    _history: record.History
 
     def __init__(self):
         self._auto_archive_duration = 0
@@ -82,6 +83,7 @@ class ThreadGen:
         self._archived = False
         self._type = record.ThreadType.public_thread
         self._members_id = []
+        self._history = record.History(messages = ())
 
     @async_chain.method
     async def with_auto_archive_duration(self, type: record.ThreadType):
@@ -124,6 +126,13 @@ class ThreadGen:
         return self
     
     @async_chain.method
+    async def with_history(self, gen_func):
+        gen = HistoryGen()
+        gen = await gen_func(gen)
+        self._history = await gen.get_result()
+        return self
+    
+    @async_chain.method
     async def get_result(self):
         return record.Thread(
             auto_archive_duration = self._auto_archive_duration,
@@ -133,7 +142,8 @@ class ThreadGen:
             slowmode_delay = self._slowmode_delay,
             archived = self._archived,
             type = self._type,
-            members_id = tuple(self._members_id)
+            members_id = tuple(self._members_id),
+            history = self._history
         )
 
 class TextChannelGen:
@@ -306,7 +316,6 @@ class GuildGen:
     async def with_category(self, gen_func):
         gen = CategoryGen()
         gen = await gen_func(gen)
-        print(gen)
         self._categories.append(await gen.get_result())
         return self
     

@@ -17,7 +17,8 @@ class Converter:
 class MessagePayload:
     content: str
     author: discord.Member
-    thread: discord.Thread | None = None
+    type: discord.MessageType
+    thread: discord.Thread | None
 
 @dataclass(eq = True)
 class MessageAuthorPayload:
@@ -49,10 +50,11 @@ class ThreadConverter(Converter):
         await (
             gen
             .with_name(self._thread.name)
+            .with_history(HistoryConverter(self._thread.history(limit = None, oldest_first=True)).gen_func)
         )
         for member in self._thread.members:
             await gen.with_member_id(member.id)
-        
+
         return gen
 
 class MessageConverter(Converter):
@@ -60,6 +62,7 @@ class MessageConverter(Converter):
         self._message = message
     
     async def convert(self, gen):
+        print("MessageConverter")
         await (
             gen
             .with_display_name(self._message.author.display_name)
@@ -73,47 +76,59 @@ class MessageConverter(Converter):
         return gen
 
 MAX_MESSAGE_LEN = 2000
-
+from loguru import logger
 class HistoryConverter(Converter):
     def __init__(self, history):
         self._history = history # save async iterator
     
+    async def to_payload(self, history):
+        async for message in history:
+            thread = None
+            if hasattr(message, "thread"):
+                thread = message.thread
+
+            yield MessagePayload(message.content, message.author, message.type, thread)
+
     async def skip_channel_thread_messages(self, history):
         # discord history может видеть некоторые системные сообщения, 
-        # например, потоки без связанных сообщений,
+        # например, threadы без связанных сообщений,
         # это мешает создать правильное дерево
         async for message in history:
             if message.type != discord.MessageType.thread_created:
                 yield message
-
+    
     async def combine_messages(self, history):
         cnt = 0
         old_msg = ""
         old_author = None
+        old_thread = None
     
         async for message in history:
             msg = message.content
             author = message.author
+            type = message.type
             thread = message.thread
             len_ = len(msg)
             cnt = cnt + len_ + 1
             
             if (
                 cnt <= MAX_MESSAGE_LEN and
-                old_author != None and 
-                thread == None and
+                old_author != None and
+                old_thread == None and
                 can_combine(old_author, author)
             ): msg = old_msg + '\n' + msg
             else:
                 if old_author != None:
-                  yield MessagePayload(old_msg, old_author, old_thread)
+                  yield MessagePayload(old_msg, old_author, old_type, old_thread)
                 cnt = len_
             
             old_msg = msg
             old_author = author
+            old_type = type
             old_thread = thread
-
-        yield MessagePayload(msg, author, thread)
+        
+        if old_author != None:
+            yield MessagePayload(old_msg, old_author, old_type, old_thread)
     
     async def skip_empty_messages(self, history):
         async for message in history:
@@ -122,7 +137,13 @@ class HistoryConverter(Converter):
 
     async def convert(self, gen):
         print("HistoryConverter")
-        async for message in self.skip_empty_messages(self.combine_messages(self.skip_channel_thread_messages(self._history))):
+
+        iter = self.to_payload(self._history)
+        iter = self.skip_channel_thread_messages(iter)
+        iter = self.combine_messages(iter)
+        iter = self.skip_empty_messages(iter)
+
+        async for message in iter:
             await gen.with_message(MessageConverter(message).gen_func)
         
         return gen
@@ -147,6 +168,7 @@ class TextChannelConverter(Converter):
 
     async def convert(self, gen):
         print("TextChannelConverter")
+
         await (
             gen
             .with_name(self._channel.name)
@@ -155,7 +177,6 @@ class TextChannelConverter(Converter):
         )
         for thread in self._channel.threads:
             if not(await self._is_message_thread(thread)):
-                print(thread.starting_message)
                 await gen.with_thread(ThreadConverter(thread).gen_func)
         return gen
 
@@ -164,6 +185,8 @@ class CategoryConverter(Converter):
         self._category = category
     
     async def convert(self, gen):
+        print("CategoryConverter")
+
         await (
             gen
             .with_name(self._category.name)
@@ -182,6 +205,8 @@ class EmojiConverter(Converter):
         self._emoji = emoji
     
     async def convert(self, gen):
+        print("EmojiConverter")
+
         await (
             gen
             .with_name(self._emoji.name)
@@ -198,6 +223,8 @@ class GuildConverter(Converter):
         self._guild = guild
     
     async def convert(self, gen):
+        print("GuildConverter")
+
         await (
             gen
             .with_name(self._guild.name)

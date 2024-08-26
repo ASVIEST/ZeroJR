@@ -51,7 +51,7 @@ class Thread:
     archived : bool
     type : ThreadType
     members_id : tuple[int]
-    # history: 'History'
+    history: 'History'
 
 @dataclass(frozen=True)
 class Message:

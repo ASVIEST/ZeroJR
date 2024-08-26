@@ -17,28 +17,32 @@ class Builder:
     def build(self, guild: discord.Guild):
         raise NotImplementedError("СОСАТЬ БОБРА! В дочернем классе builder'а нет функции build()!")
 
+from discord.utils import MISSING
+
+from loguru import logger
 
 class MessageBuilder(Builder):
     def __init__(self, message: record.Message, bot: commands.Bot):
         self.bot = bot
         self.message = message
 
-
-    async def build(self, channel: discord.TextChannel, webhook: discord.Webhook):
+    @logger.catch
+    async def build(self, sender: discord.TextChannel | discord.Thread, webhook: discord.Webhook):
         print("MessageBuilder build()")
-        async with channel.typing():
+
+        async with sender.typing():
             have_thread = self.message.thread != None
             message = await webhook.send(
                 self.message.content, 
                 username = self.message.display_name, 
                 avatar_url = self.message.display_avatar_url,
-                wait = have_thread
+                wait = have_thread,
+                thread = sender if isinstance(sender, discord.Thread) else MISSING
             )
+
             if have_thread:
-                print("message.thread")
                 builder = ThreadBuilder(self.message.thread, self.bot)
                 await builder.build(message)
-        print("End of build")
 
 
 class HistoryBuilder(Builder):
@@ -47,15 +51,14 @@ class HistoryBuilder(Builder):
         self.history = history
 
 
-    async def build(self, channel: discord.TextChannel):
+    async def build(self, channel: discord.TextChannel, sender: discord.TextChannel | discord.Thread):
         print("HistoryBuilder build()")
         webhook = await channel.create_webhook(name = "ШизаВебхуковая 1")
         for message in self.history.messages:
             inspect(message.content)
             builder = MessageBuilder(message, self.bot)
-            await builder.build(channel, webhook)
+            await builder.build(sender, webhook)
         await webhook.delete()
-        
 
 class ThreadBuilder(Builder):
     def __init__(self, thread: record.Thread, bot: commands.Bot):
@@ -70,10 +73,15 @@ class ThreadBuilder(Builder):
                     name = self.thread.name,
                     type = discord.ChannelType(self.thread.type.value)
                 )
+                channel = obj
             case discord.Message():
                 new_thread = await obj.create_thread(name = self.thread.name)
+                channel = obj.channel
             case _: print("Unexpected object type for generating thread")
         
+        history_builder = HistoryBuilder(self.thread.history, self.bot)
+        await history_builder.build(channel, new_thread)
+
         # await new_thread.edit(** self.thread.as_dict())
         for user_id in self.thread.members_id:
             user = obj.guild.get_member(user_id)
@@ -125,7 +133,7 @@ class TextChannelBuilder(Builder):
             await builder.build(new_text_channel)
         
         builder = HistoryBuilder(self.channel.history, self.bot)
-        await builder.build(new_text_channel)
+        await builder.build(new_text_channel, new_text_channel)
 
 
 class CategoryBuilder(Builder):
@@ -162,7 +170,6 @@ class GuildBuilder(Builder):
 
     async def build(self, guild: discord.Guild):
         print("GuildBuilder build()")
-        print(self.guild)
         await guild.edit(** self._get_edits())
 
         for emoji in self.guild.emojis:
