@@ -12,12 +12,16 @@ import time
 
 import record
 import builder
-from discord2record import conv_guild
+from discord2record import GuildConverter
 
 import aiohttp
 import requests
 
 import gen_record
+
+# import uvloop
+# uvloop.install()
+
 
 class ClearKind(StrEnum):
     ALL = auto()
@@ -58,11 +62,10 @@ def dump(dtree):
 async def create(guild: discord.Guild):
     
     start_time = time.time()
-    print('ok')
     gen = gen_record.GuildGen()
-    guild_obj = await (await conv_guild(guild, gen)).get_result()
-    
-    print(guild_obj)
+    gen = await GuildConverter(guild).convert(gen)
+    guild_obj = await gen.get_result()
+
     await asyncio.to_thread(dump, dtree=guild_obj)
 
     end_time = time.time()
@@ -98,36 +101,34 @@ async def load(guild: discord.Guild, file_name: Path):
     await guild_builder.build(guild)
     print("Load complete!")
 
+
+
+def alambda(fn):
+    async def wrapper(gen):
+        return await fn(gen)
+    return wrapper
+
 @my_console.command()
 async def test_gen(guild: discord.Guild):
-    async def msg1(gen):
-        return (
-            gen
-            .with_content("Hello world!")
-        )
-
-    async def history(gen):
-        return (
-            gen
-            .with_message(msg1)
-        )
-    async def chan(gen):
-        return (
-            gen
-            .with_name("test_chan")
-            .with_history(history)
-        )
-    async def category(gen):
-        return (
-            gen
-            .with_name("test")
-            .with_text_channel(chan)
-        )
     print("start")
     guild_record = await (
         gen_record.GuildGen()
         .with_name("guild_name")
-        .with_category(category)
+        .with_category(alambda(lambda gen: (
+            gen
+            .with_name("test_category")
+            .with_text_channel(alambda(lambda gen: (
+                gen
+                .with_name("test_chan")
+                .with_history(alambda(lambda gen: (
+                    gen
+                    .with_message(alambda(lambda gen: (
+                        gen
+                        .with_content("Hello world!")
+                    )))
+                )))
+            )))
+        )))
     ).get_result()
     print("tree initilized!")
     print(guild_record)

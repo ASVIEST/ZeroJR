@@ -146,8 +146,8 @@ class GuildBuilder(Builder):
         print(self.guild)
         await guild.edit(** self._get_edits())
 
-        # for emoji in self.guild.emojis:
-        #     await guild.create_custom_emoji(name = emoji.name, image = emoji.data)
+        for emoji in self.guild.emojis:
+            await guild.create_custom_emoji(name = emoji.name, image = emoji.data)
 
         for category in self.guild.categories:
             builder = CategoryBuilder(category, self.bot)

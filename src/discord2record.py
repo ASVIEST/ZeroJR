@@ -1,9 +1,7 @@
 import discord
 import gen_record
 from dataclasses import dataclass
-
-# class Indexer:
-    # wrote_categories: []
+import aiohttp
 
 class Converter:
     async def convert(self, gen):
@@ -83,11 +81,15 @@ class HistoryConverter(Converter):
             old_author = author
 
         yield MessagePayload(msg, author)
+    
+    async def skip_empty_messages(self, history):
+        async for message in history:
+            if message.content != '':
+                yield message
 
     async def convert(self, gen):
         print("HistoryConverter")
-        async for message in self.combine_messages(self._history):
-            # if message.content != '':
+        async for message in self.skip_empty_messages(self.combine_messages(self._history)):
             await gen.with_message(MessageConverter(message).gen_func)
         
         return gen
@@ -99,10 +101,9 @@ class ThreadConverter(Converter):
     async def convert(self, gen):
         print("ThreadConverter")
         await self._thread.fetch_members()
-        print("fe")
         for member in self._thread.members:
             await gen.with_member_id(member.id)
-        print("conv")
+        
         return gen
 
 class TextChannelConverter(Converter):
@@ -118,9 +119,8 @@ class TextChannelConverter(Converter):
             .with_history(HistoryConverter(self._channel.history(limit = None, oldest_first=True)).gen_func)
         )
         for thread in self._channel.threads:
-            await gen.with_thread(ThreadConverter(thread).gen_func)
-            print("ok")
-        print("end")
+            if thread.starting_message == None:
+                await gen.with_thread(ThreadConverter(thread).gen_func)
         return gen
 
 class CategoryConverter(Converter):
@@ -128,8 +128,6 @@ class CategoryConverter(Converter):
         self._category = category
     
     async def convert(self, gen):
-        print("CONV")
-        # print(self._category.nsfw)
         await (
             gen
             .with_name(self._category.name)
@@ -141,36 +139,38 @@ class CategoryConverter(Converter):
             match channel:
                 case discord.TextChannel(): await gen.with_text_channel(TextChannelConverter(channel).gen_func)
                 case discord.VoiceChannel: print("voice_channel")
-        print("after chan")
         return gen
 
-async def conv_message(message: discord.Message, gen: gen_record.MessageGen):
-    return await (
-        gen
-        .with_display_name(message.author.display_name)
-        .with_display_avatar_url(message.author.display_avatar.url)
-        .with_content(message.content)
-    )
-
-# async def conv_text_channel()
-
-async def conv_category(category: discord.CategoryChannel, gen: gen_record.CategoryGen):
-    gen = await (
-        gen
-        .with_name(category.name)
-        .with_nsfw(category.nsfw)
-        .with_position(category.position)
-    )
-
-    for chan in category.channels:
-        match chan:
-          case discord.TextChannel(): print("text_channel")#gen.with_text_channel(lambda gen: await conv_text_channel(gen))
-          case _: print("Invalid channel")
+class EmojiConverter(Converter):
+    def __init__(self, emoji: discord.Emoji):
+        self._emoji = emoji
     
-    return gen
+    async def convert(self, gen):
+        await (
+            gen
+            .with_name(self._emoji.name)
+        )
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self._emoji.url) as resp:
+                await gen.with_data(await resp.read())
 
-async def conv_guild(guild: discord.Guild, gen: gen_record.GuildGen):
-    for category in guild.categories:
-        await gen.with_category(CategoryConverter(category).gen_func)
+        return gen
+
+
+class GuildConverter(Converter):
+    def __init__(self, guild: discord.Guild):
+        self._guild = guild
     
-    return gen
+    async def convert(self, gen):
+        await (
+            gen
+            .with_name(self._guild.name)
+        )
+
+        for emoji in self._guild.emojis:
+            await gen.with_emoji(EmojiConverter(emoji).gen_func)
+
+        for category in self._guild.categories:
+            await gen.with_category(CategoryConverter(category).gen_func)
+
+        return gen

@@ -5,11 +5,13 @@ class MessageGen:
     _display_name : str
     _display_avatar_url : str
     _content : str
+    _thread: record.Thread | None
 
     def __init__(self):
         self._display_name = "default"
         self._display_avatar_url = ""
         # self._content is required
+        self._thread = None
     
     @async_chain.method
     async def with_display_name(self, display_name: str):
@@ -25,13 +27,21 @@ class MessageGen:
     async def with_content(self, content: str):
         self._content = content
         return self
+
+    @async_chain.method
+    async def with_thread(self, gen_func):
+        gen = ThreadGen()
+        gen = await gen_func(gen)
+        self._thread = await gen.get_result()
+        return self
     
     @async_chain.method
     async def get_result(self):
         return record.Message(
             display_name = self._display_name,
             display_avatar_url = self._display_avatar_url,
-            content = self._content
+            content = self._content,
+            thread = self._thread
         )
 
 class HistoryGen:
@@ -72,7 +82,7 @@ class ThreadGen:
         self._archived = False
         self._type = record.ThreadType.public_thread
         self._members_id = []
-    
+
     @async_chain.method
     async def with_auto_archive_duration(self, type: record.ThreadType):
         self._auto_archive_duration = type
@@ -231,13 +241,9 @@ class CategoryGen:
     
     @async_chain.method
     async def with_text_channel(self, gen_func):
-        print("Hi")
         gen = TextChannelGen()
         gen = await gen_func(gen)
-        print("pom")
-        res = await gen.get_result()
-        print("ok")
-        self._channels.append(res)
+        self._channels.append(await gen.get_result())
         return self
 
     @async_chain.method
@@ -300,6 +306,7 @@ class GuildGen:
     async def with_category(self, gen_func):
         gen = CategoryGen()
         gen = await gen_func(gen)
+        print(gen)
         self._categories.append(await gen.get_result())
         return self
     
@@ -310,25 +317,3 @@ class GuildGen:
             emojis = tuple(self._emojis),
             categories = tuple(self._categories)
         )
-
-if __name__ == "__main__":
-    tree = (
-    GuildGen()
-    .with_name("guild_name")
-    .with_category(lambda x: (
-        x
-        .with_name("test")
-        .with_text_channel(lambda x: (
-            x
-            .with_name("test_chan")
-            .with_history(lambda x: (
-                x
-                .with_message(lambda x: (
-                    x
-                    .with_content("Hello world!")
-                    ))
-                ))
-            ))
-        ))
-    ).get_result()
-    print(tree)

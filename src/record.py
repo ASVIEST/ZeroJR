@@ -42,16 +42,6 @@ class VoiceRegion(Enum):
     default = "default"
 
 @dataclass(frozen=True)
-class Message:
-    display_name : str
-    display_avatar_url : str
-    content : str
-
-@dataclass(frozen=True)
-class History:
-    messages : tuple[Message]
-
-@dataclass(frozen=True)
 class Thread:
     auto_archive_duration : int
     invitable : bool
@@ -61,6 +51,17 @@ class Thread:
     archived : bool
     type : ThreadType
     members_id : tuple[int]
+
+@dataclass(frozen=True)
+class Message:
+    display_name : str
+    display_avatar_url : str
+    content : str
+    thread: Thread | None
+
+@dataclass(frozen=True)
+class History:
+    messages : tuple[Message]
 
 @dataclass(frozen=True)
 class VoiceChannel:
