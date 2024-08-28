@@ -13,6 +13,7 @@ from dpyConsole.errors import CommandNotFound, ExtensionError
 
 logger = logging.getLogger("dpyConsole")
 
+import py_linenoise.linenoise as linenoise
 
 class Console:
     """
@@ -28,6 +29,27 @@ class Console:
         self.converter = kwargs.get("converter", Converter(client))
         self.__extensions = {}
         self.__cogs = {}
+    
+        
+ 
+    def init_linenoise(self):
+        def complete(s):
+            if len(s) == 0: return None
+            console_in = shlex.split(s)
+            completes = []
+            if len(console_in) == 1:
+                for k in self.__commands__.keys():
+                    if k.startswith(s):
+                        completes.append(k)
+            return tuple(completes)
+
+        self.ln = linenoise.linenoise()
+        self.ln.history_load("history.txt")
+        self.ln.set_hotkey("?")
+        self.ln.set_multiline(True)
+
+        self.ln.set_completion_callback(complete)
+
 
     def add_console_cog(self, obj):
         if isinstance(obj, Cog):
@@ -100,11 +122,20 @@ class Console:
         :return:
         """
         logger.info("Console is ready and is listening for commands\n")
+        self.init_linenoise()
         while True:
             try:
-                console_in = shlex.split(self.input.readline())
+                line = self.ln.read("-> ")
+                if line is None:
+                    break
+                
+                if len(line) > 0:
+                    self.ln.history_add(line)
+                    self.ln.history_save("history.txt")
+                
+                console_in = shlex.split(line) # INP
                 if len(console_in) == 0:
-                    return
+                    continue
                 try:
                     command = self.__commands__.get(console_in[0], None)
 
@@ -127,6 +158,7 @@ class Console:
                     traceback.print_exc()
             except Exception:
                 traceback.print_exc()
+        print("EXIT")
 
     def prepare(self, command, args):
         args_ = args.copy()
@@ -219,7 +251,8 @@ class Command:
         :return:
         """
         if loop:
-            asyncio.run_coroutine_threadsafe(self.__callback__(*args), loop=loop)
+            task = asyncio.run_coroutine_threadsafe(self.__callback__(*args), loop=loop)
+            while not task.done(): pass # wait for task
         else:
             self.__callback__(*args)
 
