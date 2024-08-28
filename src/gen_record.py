@@ -222,6 +222,65 @@ class TextChannelGen:
             history = self._history
         )
 
+DEFAULT_BITRATE = 64 * 1024 * 8
+
+class VoiceChannelGen:
+    _bitrate : int
+    _name : str
+    _slowmode_delay : int
+    _user_limit : int
+    _rtc_region : record.VoiceRegion
+    _type : record.VoiceType
+    _video_quality_mode : record.VideoQualityMode
+    _history: record.History
+
+    def __init__(self):
+        self._bitrate = DEFAULT_BITRATE
+        self._name = "default"
+        self._slowmode_delay = 0
+        self._user_limit =  25
+        self._rtc_region = record.VoiceRegion.default
+        self._type = record.VoiceType.voice
+        self._video_quality_mode = record.VideoQualityMode.auto
+        self._history = record.History(messages = ())
+    
+    @async_chain.method
+    async def with_bitrate(self, bitrate: int):
+        self._bitrate = bitrate
+        return self
+    
+    @async_chain.method
+    async def with_name(self, name: str):
+        self._name = name
+        return self
+    
+    @async_chain.method
+    async def with_user_limit(self, limit: int):
+        self._user_limit = limit
+        return self
+    
+    @async_chain.method
+    async def with_history(self, gen_func):
+        gen = HistoryGen()
+        gen = await gen_func(gen)
+        self._history = await gen.get_result()
+        return self
+    
+    @async_chain.method
+    async def get_result(self):
+        return record.VoiceChannel(
+            bitrate = self._bitrate,
+            name = self._name,
+            slowmode_delay = self._slowmode_delay,
+            user_limit = self._user_limit,
+            rtc_region = self._rtc_region,
+            type = self._type,
+            video_quality_mode = self._video_quality_mode,
+            history = self._history
+        )
+
+from loguru import logger
+
 class CategoryGen:
     _name : str
     _nsfw : bool
@@ -252,6 +311,14 @@ class CategoryGen:
     @async_chain.method
     async def with_text_channel(self, gen_func):
         gen = TextChannelGen()
+        gen = await gen_func(gen)
+        self._channels.append(await gen.get_result())
+        return self
+    
+    @async_chain.method
+    @logger.catch
+    async def with_voice_channel(self, gen_func):
+        gen = VoiceChannelGen()
         gen = await gen_func(gen)
         self._channels.append(await gen.get_result())
         return self

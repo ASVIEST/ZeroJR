@@ -180,6 +180,21 @@ class TextChannelConverter(Converter):
                 await gen.with_thread(ThreadConverter(thread).gen_func)
         return gen
 
+class VoiceChannelConverter(Converter):
+    def __init__(self, channel: discord.VoiceChannel):
+        self._channel = channel
+    
+    async def convert(self, gen):
+        print("VoiceChannelConverter")
+
+        return await (
+            gen
+            .with_name(self._channel.name)
+            .with_bitrate(self._channel.bitrate)
+            .with_user_limit(self._channel.user_limit)
+            .with_history(HistoryConverter(self._channel.history(limit = None, oldest_first=True)).gen_func)
+        )
+
 class CategoryConverter(Converter):
     def __init__(self, category: discord.CategoryChannel):
         self._category = category
@@ -197,7 +212,7 @@ class CategoryConverter(Converter):
         for channel in self._category.channels:
             match channel:
                 case discord.TextChannel(): await gen.with_text_channel(TextChannelConverter(channel).gen_func)
-                case discord.VoiceChannel: print("voice_channel")
+                case discord.VoiceChannel(): await gen.with_voice_channel(VoiceChannelConverter(channel).gen_func)
         return gen
 
 class EmojiConverter(Converter):

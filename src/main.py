@@ -15,6 +15,7 @@ import builder
 from discord2record import GuildConverter
 
 import aiohttp
+import aiofiles
 import requests
 
 import gen_record
@@ -51,12 +52,13 @@ def clear_kind_convert(param):
     return ClearKind(param)
 my_console.converter.add_converter(ClearKind, clear_kind_convert) # What the fuck?
 
-
-def dump(dtree):
-    print(pickle.dumps(dtree))
-    with open("tree.pkl", "wb") as file:
-        pickle.dump(dtree, file)
-
+async def aiodump(tree):
+    async with aiofiles.open('tree.pkl', 'wb') as f:
+        data = pickle.dumps(
+            tree, 
+            protocol = pickle.HIGHEST_PROTOCOL
+        )
+        await f.write(data)
 
 @my_console.command()
 async def create(guild: discord.Guild):
@@ -65,8 +67,7 @@ async def create(guild: discord.Guild):
     gen = gen_record.GuildGen()
     gen = await GuildConverter(guild).convert(gen)
     guild_obj = await gen.get_result()
-    print(guild_obj)
-    await asyncio.to_thread(dump, dtree=guild_obj)
+    await aiodump(guild_obj)
 
     end_time = time.time()
     print("Create complete!")
@@ -135,6 +136,10 @@ async def test_gen(guild: discord.Guild):
                         )))
                     )))
                 )))
+            )))
+            .with_voice_channel(alambda(lambda gen: (
+                gen
+                .with_name("test_voice_chan")
             )))
         )))
     ).get_result()

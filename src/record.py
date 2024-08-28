@@ -73,6 +73,7 @@ class VoiceChannel:
     rtc_region : VoiceRegion
     type : VoiceType
     video_quality_mode : VideoQualityMode
+    history: History
 
 
 #Без учёта прав доступа
