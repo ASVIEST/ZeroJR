@@ -51,7 +51,7 @@ class HistoryBuilder(Builder):
         self.history = history
 
 
-    async def build(self, channel: discord.TextChannel, sender: discord.TextChannel | discord.Thread):
+    async def build(self, channel: discord.TextChannel | discord.VoiceChannel, sender: discord.TextChannel | discord.Thread | discord.VoiceChannel):
         print("HistoryBuilder build()")
         webhook = await channel.create_webhook(name = "ШизаВебхуковая 1")
         for message in self.history.messages:
@@ -104,7 +104,8 @@ class VoiceChannelBuilder(Builder):
         print("VoiceChannelBuilder build()")
         new_voice_channel = await guild.create_voice_channel(self.channel.name, category = category) #type = discord.ChannelType(self.channel.type.value))
         # await new_voice_channel.edit(** self.channel.as_dict())
-
+        builder = HistoryBuilder(self.channel.history, self.bot)
+        await builder.build(new_voice_channel, new_voice_channel)
 
 class TextChannelBuilder(Builder):
     def __init__(self, channel: record.TextChannel, bot: commands.Bot):
