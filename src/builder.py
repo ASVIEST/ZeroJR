@@ -3,6 +3,45 @@ import discord
 from discord.ext import commands
 import record
 import asyncio
+from loguru import logger
+
+class CachedWebhookStorage:
+    ## [TextChannel(id=1) webhook, TextChannel(id=2) webhook]
+    ## max = 2 => +TextChannel(id=3) webhook, -TextChannel(id=2) webhook
+    def __init__(self, max_count: int):
+        self._max_count = max_count
+        self._channel_to_webhook = {}
+        self._webhook_cnt = 0
+    
+    async def compute_webhook_cnt(self, channel):
+        if channel.id not in self._channel_to_webhook:
+            self._webhook_cnt += len(await channel.webhooks()) # channel already have webhooks => add it to sum
+
+    @logger.catch()
+    async def acquire_webhook(self, channel: discord.TextChannel):
+        await self.compute_webhook_cnt(channel)
+        print(self._webhook_cnt)
+
+        NAME = f"ШизаВебхуковая {channel.name}"
+        webhook: discord.Webhook = None
+        if self._webhook_cnt >= self._max_count:
+            _, last_webhook = self._channel_to_webhook.popitem()
+            await last_webhook.edit(
+                channel = channel, 
+                name=NAME,
+                reason="Next channel"
+            ) # create -> rate limit more common
+            webhook = last_webhook
+        else:
+            webhook = await channel.create_webhook(name = NAME)
+        
+        self._webhook_cnt += 1
+        self._channel_to_webhook[webhook.channel.id] = webhook
+        return webhook
+    
+    async def release_webhooks(self):
+        for webhook in self._channel_to_webhook.values():
+            await webhook.delete()
 
 
 # Для чего я создан?
@@ -19,17 +58,14 @@ class Builder:
 
 from discord.utils import MISSING
 
-from loguru import logger
-
 class MessageBuilder(Builder):
-    def __init__(self, message: record.Message, bot: commands.Bot):
+    def __init__(self, message: record.Message, webhooks: CachedWebhookStorage, bot: commands.Bot):
         self.bot = bot
         self.message = message
+        self.webhooks = webhooks
 
-    @logger.catch
     async def build(self, sender: discord.TextChannel | discord.Thread, webhook: discord.Webhook):
         print("MessageBuilder build()")
-
         async with sender.typing():
             have_thread = self.message.thread != None
             message = await webhook.send(
@@ -41,28 +77,29 @@ class MessageBuilder(Builder):
             )
 
             if have_thread:
-                builder = ThreadBuilder(self.message.thread, self.bot)
+                builder = ThreadBuilder(self.message.thread, self.webhooks, self.bot)
                 await builder.build(message)
 
 
 class HistoryBuilder(Builder):
-    def __init__(self, history: record.History, bot: commands.Bot):
+    def __init__(self, history: record.History, webhooks: CachedWebhookStorage, bot: commands.Bot):
         self.bot = bot
         self.history = history
+        self.webhooks = webhooks
 
 
     async def build(self, channel: discord.TextChannel | discord.VoiceChannel, sender: discord.TextChannel | discord.Thread | discord.VoiceChannel):
         print("HistoryBuilder build()")
-        webhook = await channel.create_webhook(name = "ШизаВебхуковая 1")
+        webhook = await self.webhooks.acquire_webhook(channel)
         for message in self.history.messages:
             inspect(message.content)
-            builder = MessageBuilder(message, self.bot)
+            builder = MessageBuilder(message, self.webhooks, self.bot)
             await builder.build(sender, webhook)
-        await webhook.delete()
 
 class ThreadBuilder(Builder):
-    def __init__(self, thread: record.Thread, bot: commands.Bot):
+    def __init__(self, thread: record.Thread, webhooks: CachedWebhookStorage, bot: commands.Bot):
         self.bot = bot
+        self.webhooks = webhooks
         self.thread = thread
 
     async def build(self, obj: discord.TextChannel | discord.Message):
@@ -79,7 +116,7 @@ class ThreadBuilder(Builder):
                 channel = obj.channel
             case _: print("Unexpected object type for generating thread")
         
-        history_builder = HistoryBuilder(self.thread.history, self.bot)
+        history_builder = HistoryBuilder(self.thread.history, self.webhooks, self.bot)
         await history_builder.build(channel, new_thread)
 
         # await new_thread.edit(** self.thread.as_dict())
@@ -89,9 +126,10 @@ class ThreadBuilder(Builder):
                 await new_thread.add_user(user)
 
 class VoiceChannelBuilder(Builder):
-    def __init__(self, channel: record.VoiceChannel, bot: commands.Bot):
+    def __init__(self, channel: record.VoiceChannel, webhooks: CachedWebhookStorage, bot: commands.Bot):
         self.bot = bot
         self.channel = channel
+        self.webhooks = webhooks
     
     def _get_edits(self):
         d = asdict(self.channel)
@@ -104,13 +142,14 @@ class VoiceChannelBuilder(Builder):
         print("VoiceChannelBuilder build()")
         new_voice_channel = await guild.create_voice_channel(self.channel.name, category = category) #type = discord.ChannelType(self.channel.type.value))
         # await new_voice_channel.edit(** self.channel.as_dict())
-        builder = HistoryBuilder(self.channel.history, self.bot)
+        builder = HistoryBuilder(self.channel.history, self.webhooks, self.bot)
         await builder.build(new_voice_channel, new_voice_channel)
 
 class TextChannelBuilder(Builder):
-    def __init__(self, channel: record.TextChannel, bot: commands.Bot):
+    def __init__(self, channel: record.TextChannel, webhooks: CachedWebhookStorage, bot: commands.Bot):
         self.bot = bot
         self.channel = channel
+        self.webhooks = webhooks
     
     def _get_edits(self):
         d = asdict(self.guild)
@@ -130,17 +169,18 @@ class TextChannelBuilder(Builder):
         # await new_text_channel.edit(** self._get_edits())
     
         for thread in self.channel.threads:
-            builder = ThreadBuilder(thread, self.bot)
+            builder = ThreadBuilder(thread, self.webhooks, self.bot)
             await builder.build(new_text_channel)
         
-        builder = HistoryBuilder(self.channel.history, self.bot)
+        builder = HistoryBuilder(self.channel.history, self.webhooks, self.bot)
         await builder.build(new_text_channel, new_text_channel)
 
 
 class CategoryBuilder(Builder):
-    def __init__(self, category: record.Category, bot: commands.Bot):
+    def __init__(self, category: record.Category, webhooks: CachedWebhookStorage, bot: commands.Bot):
         self.bot = bot
         self.category = category
+        self.webhooks = webhooks
 
     def _get_edits(self):
         return {"nsfw": self.guild.nsfw}
@@ -157,7 +197,7 @@ class CategoryBuilder(Builder):
                          record.VoiceChannel: VoiceChannelBuilder}
 
         for channel in self.category.channels:
-            builder = CHANNEL_BUILDER[type(channel)](channel, self.bot)
+            builder = CHANNEL_BUILDER[type(channel)](channel, self.webhooks, self.bot)
             await builder.build(guild, new_category_channel)
 
 from dataclasses import asdict
@@ -165,6 +205,7 @@ class GuildBuilder(Builder):
     def __init__(self, guild: record.Guild, bot: commands.Bot):
         self.bot = bot
         self.guild = guild
+        self.webhooks = CachedWebhookStorage(2)
     
     def _get_edits(self):
         return {"name": self.guild.name}
@@ -177,5 +218,7 @@ class GuildBuilder(Builder):
             await guild.create_custom_emoji(name = emoji.name, image = emoji.data)
 
         for category in self.guild.categories:
-            builder = CategoryBuilder(category, self.bot)
+            builder = CategoryBuilder(category, self.webhooks, self.bot)
             await builder.build(guild)
+        
+        await self.webhooks.release_webhooks()

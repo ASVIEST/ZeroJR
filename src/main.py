@@ -16,7 +16,6 @@ from discord2record import GuildConverter
 
 import aiohttp
 import aiofiles
-import requests
 
 import gen_record
 
