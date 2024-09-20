@@ -18,7 +18,7 @@ class CachedWebhookStorage:
             self._webhook_cnt += len(await channel.webhooks()) # channel already have webhooks => add it to sum
 
     @logger.catch()
-    async def acquire_webhook(self, channel: discord.TextChannel):
+    async def acquire_webhook_impl(self, channel: discord.TextChannel):
         await self.compute_webhook_cnt(channel)
         print(self._webhook_cnt)
 
@@ -38,6 +38,12 @@ class CachedWebhookStorage:
         self._webhook_cnt += 1
         self._channel_to_webhook[webhook.channel.id] = webhook
         return webhook
+    
+    async def acquire_webhook(self, channel: discord.TextChannel):
+        if channel.id in self._channel_to_webhook:
+            return self._channel_to_webhook[channel.id]
+        else:
+            return await self.acquire_webhook_impl(channel)
     
     async def release_webhooks(self):
         for webhook in self._channel_to_webhook.values():
@@ -64,8 +70,9 @@ class MessageBuilder(Builder):
         self.message = message
         self.webhooks = webhooks
 
-    async def build(self, sender: discord.TextChannel | discord.Thread, webhook: discord.Webhook):
+    async def build(self, sender: discord.TextChannel | discord.Thread):
         print("MessageBuilder build()")
+        webhook = await self.webhooks.acquire_webhook(sender)
         async with sender.typing():
             have_thread = self.message.thread != None
             message = await webhook.send(
@@ -90,11 +97,10 @@ class HistoryBuilder(Builder):
 
     async def build(self, channel: discord.TextChannel | discord.VoiceChannel, sender: discord.TextChannel | discord.Thread | discord.VoiceChannel):
         print("HistoryBuilder build()")
-        webhook = await self.webhooks.acquire_webhook(channel)
         for message in self.history.messages:
             inspect(message.content)
             builder = MessageBuilder(message, self.webhooks, self.bot)
-            await builder.build(sender, webhook)
+            await builder.build(sender)
 
 class ThreadBuilder(Builder):
     def __init__(self, thread: record.Thread, webhooks: CachedWebhookStorage, bot: commands.Bot):
