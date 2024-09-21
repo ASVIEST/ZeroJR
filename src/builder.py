@@ -6,6 +6,7 @@ import asyncio
 from loguru import logger
 from typing import Self
 import aiohttp
+from io import BytesIO
 
 class CachedWebhookStorage:
     ## [TextChannel(id=1) webhook, TextChannel(id=2) webhook]
@@ -77,23 +78,41 @@ class SendMessageTask:
         self.message = message
         self.dummies = [] # -> flatten
     
+    async def _get_attachments_impl(self) -> list[discord.File]:
+        files: list[discord.File] = []
+        async with aiohttp.ClientSession() as session:
+            for attachment in self.message.attachments:
+                async with session.get(attachment.url) as resp: 
+                    data = await resp.read()
+                
+                files.append(discord.File(
+                    fp = BytesIO(data), 
+                    filename = attachment.filename, 
+                    spoiler = attachment.is_spoiler
+                ))
+
+        return files
+    
+    async def _get_attachments(self) -> list[discord.File]:
+        if len(self.message.attachments) > 0:
+            return await self._get_attachments_impl()
+        else:
+            return []
+
     @logger.catch()
     async def eval(self, webhooks: CachedWebhookStorage):
         print(f"SendMessageTask(sender={self.sender.name}) eval()")
-        if not self.message.content.strip():
-            return "Skip empty message"
-        else:
-            print(self.message.content)
-
         webhook = await webhooks.acquire_webhook(self.sender)
         async with self.sender.typing():
             have_thread = self.message.thread != None
+
             message = await webhook.send(
                 self.message.content, 
                 username = self.message.display_name, 
                 avatar_url = self.message.display_avatar_url,
                 wait = have_thread,
-                thread = self.sender if isinstance(self.sender, discord.Thread) else MISSING
+                thread = self.sender if isinstance(self.sender, discord.Thread) else MISSING,
+                files = await self._get_attachments()
             )
 
             if have_thread:
@@ -188,7 +207,6 @@ class HistoryBuilder(Builder):
         print("HistoryBuilder build()")
         dummy = BuildDummy()
         for message in self.history.messages:
-            inspect(message.content)
             builder = MessageBuilder(message, self.webhooks, self.bot)
             dummy += await builder.build(sender)
         return dummy

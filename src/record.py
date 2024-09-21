@@ -51,14 +51,21 @@ class Thread:
     archived : bool
     type : ThreadType
     members_id : tuple[int]
-    history: 'History'
+    history : 'History'
+
+@dataclass(frozen=True)
+class Attachment:
+    filename : str
+    url : str
+    is_spoiler : bool
 
 @dataclass(frozen=True)
 class Message:
     display_name : str
     display_avatar_url : str
     content : str
-    thread: Thread | None
+    thread : Thread | None
+    attachments : tuple[Attachment]
 
 @dataclass(frozen=True)
 class History:

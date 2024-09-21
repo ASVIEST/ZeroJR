@@ -19,6 +19,7 @@ class MessagePayload:
     author: discord.Member
     type: discord.MessageType
     thread: discord.Thread | None
+    attachments: list[discord.Attachment]
 
 @dataclass(eq = True)
 class MessageAuthorPayload:
@@ -57,6 +58,19 @@ class ThreadConverter(Converter):
 
         return gen
 
+class AttachmentConverter(Converter):
+    def __init__(self, attachment: discord.Attachment):
+        self._attachment = attachment
+    
+    async def convert(self, gen):
+        print("AttachmentConverter")
+        return await (
+            gen
+            .with_filename(self._attachment.filename)
+            .with_url(self._attachment.url)
+            .with_is_spoiler(self._attachment.is_spoiler())
+        )
+
 class MessageConverter(Converter):
     def __init__(self, message: MessagePayload):
         self._message = message
@@ -69,6 +83,8 @@ class MessageConverter(Converter):
             .with_display_avatar_url(self._message.author.display_avatar.url)
             .with_content(self._message.content)
         )
+        for attachment in self._message.attachments:
+            await gen.with_attachment(AttachmentConverter(attachment).gen_func)
 
         if self._message.thread != None:
             await gen.with_thread(ThreadConverter(self._message.thread).gen_func)
@@ -86,8 +102,8 @@ class HistoryConverter(Converter):
             thread = None
             if hasattr(message, "thread"):
                 thread = message.thread
-
-            yield MessagePayload(message.content, message.author, message.type, thread)
+            
+            yield MessagePayload(message.content, message.author, message.type, thread, message.attachments)
 
     async def skip_channel_thread_messages(self, history):
         # discord history может видеть некоторые системные сообщения, 
@@ -102,12 +118,14 @@ class HistoryConverter(Converter):
         old_msg = ""
         old_author = None
         old_thread = None
+        old_attachments = []
     
         async for message in history:
             msg = message.content
             author = message.author
             type = message.type
             thread = message.thread
+            attachments = message.attachments
             len_ = len(msg)
             cnt = cnt + len_ + 1
             
@@ -115,24 +133,26 @@ class HistoryConverter(Converter):
                 cnt <= MAX_MESSAGE_LEN and
                 old_author != None and
                 old_thread == None and
-                can_combine(old_author, author)
+                can_combine(old_author, author) and
+                len(message.attachments) <= 0
             ): msg = old_msg + '\n' + msg
             else:
                 if old_author != None:
-                  yield MessagePayload(old_msg, old_author, old_type, old_thread)
+                  yield MessagePayload(old_msg, old_author, old_type, old_thread, old_attachments)
                 cnt = len_
             
             old_msg = msg
             old_author = author
             old_type = type
             old_thread = thread
+            old_attachments = attachments
         
         if old_author != None:
-            yield MessagePayload(old_msg, old_author, old_type, old_thread)
+            yield MessagePayload(old_msg, old_author, old_type, old_thread, old_attachments)
     
     async def skip_empty_messages(self, history):
         async for message in history:
-            if message.content != '':
+            if message.content.strip() or len(message.attachments) > 0:
                 yield message
 
     async def convert(self, gen):

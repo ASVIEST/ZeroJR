@@ -1,17 +1,52 @@
 import record
 import async_chain
 
+class AttachmentGen:
+    _filename: str
+    _url: str
+    _is_spoiler: bool
+
+    def __init__(self) -> None:
+        self._filename = "default"
+        self._url = "default"
+        self._is_spoiler = False
+    
+    @async_chain.method
+    async def with_filename(self, filename: str):
+        self._filename = filename
+        return self
+    
+    @async_chain.method
+    async def with_url(self, url: str):
+        self._url = url
+        return self
+    
+    @async_chain.method
+    async def with_is_spoiler(self, is_spoiler: bool):
+        self._is_spoiler = is_spoiler
+        return self
+    
+    @async_chain.method
+    async def get_result(self):
+        return record.Attachment(
+            filename = self._filename,
+            url = self._url,
+            is_spoiler = self._is_spoiler
+        )
+
 class MessageGen:
     _display_name : str
     _display_avatar_url : str
     _content : str
     _thread: record.Thread | None
+    _attachments: list[record.Attachment]
 
     def __init__(self):
         self._display_name = "default"
         self._display_avatar_url = ""
         # self._content is required
         self._thread = None
+        self._attachments = []
     
     @async_chain.method
     async def with_display_name(self, display_name: str):
@@ -36,12 +71,20 @@ class MessageGen:
         return self
     
     @async_chain.method
+    async def with_attachment(self, gen_func):
+        gen = AttachmentGen()
+        gen = await gen_func(gen)
+        self._attachments.append(await gen.get_result())
+        return self
+    
+    @async_chain.method
     async def get_result(self):
         return record.Message(
             display_name = self._display_name,
             display_avatar_url = self._display_avatar_url,
             content = self._content,
-            thread = self._thread
+            thread = self._thread,
+            attachments = tuple(self._attachments)
         )
 
 class HistoryGen:
