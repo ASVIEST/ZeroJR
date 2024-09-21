@@ -57,6 +57,7 @@ async def aiodump(tree):
             tree, 
             protocol = pickle.HIGHEST_PROTOCOL
         )
+        await f.write(b'DPKL') # Identify
         await f.write(data)
 
 @my_console.command()
@@ -95,6 +96,7 @@ async def clear(guild: discord.Guild, clear_kind: ClearKind = ClearKind.ALL):
 @my_console.command()
 async def load(guild: discord.Guild, file_name: Path):
     with open(file_name, "rb") as file:
+        assert file.read(4) == b"DPKL"
         guild_from_file = pickle.load(file)
     guild_builder = builder.GuildBuilder(guild_from_file, bot)
     await guild_builder.build(guild)
