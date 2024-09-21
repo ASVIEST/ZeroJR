@@ -106,3 +106,4 @@ class Guild:
     name : str
     emojis : tuple[Emoji]
     categories : tuple[Category]
+    free_channels : tuple[TextChannel | VoiceChannel]

@@ -14,7 +14,6 @@ class CachedWebhookStorage:
         self._max_count = max_count
         self._channel_to_webhook = dict()
         self._webhook_id_to_channel = dict()
-        self._webhook_cnt = 0
         self._webhook_edits: dict[int, int] = {}
         
     @logger.catch()
@@ -67,8 +66,10 @@ class CachedWebhookStorage:
             return await self.acquire_webhook_impl(channel)
     
     async def release_webhooks(self):
-        for webhook in self._channel_to_webhook.values():
+        for channel, webhook in self._channel_to_webhook.copy().items():
             await webhook.delete()
+            del self._channel_to_webhook[channel]
+            del self._webhook_id_to_channel[webhook.id]
 
 class SendMessageTask:
     def __init__(self, sender: discord.TextChannel | discord.Thread, message: record.Message) -> None:
@@ -147,6 +148,7 @@ class BuildDummy:
         self.flatten_messages()
         for i in self.reorder_messages():
             await i.eval(webhooks)
+        await webhooks.release_webhooks()
 
 # Для чего я создан?
 # Вызвать ошибку.
@@ -275,6 +277,11 @@ class TextChannelBuilder(Builder):
         dummy += await builder.build(new_text_channel, new_text_channel)
         return dummy
 
+CHANNEL_BUILDER = {
+    record.TextChannel: TextChannelBuilder,
+    record.VoiceChannel: VoiceChannelBuilder
+}
+
 class CategoryBuilder(Builder):
     def __init__(self, category: record.Category, webhooks: CachedWebhookStorage, bot: commands.Bot):
         self.bot = bot
@@ -292,9 +299,6 @@ class CategoryBuilder(Builder):
         new_category_channel = await guild.create_category_channel(self.category.name, position = self.category.position)
         # await new_category_channel.edit(** self.category.as_dict())
 
-        CHANNEL_BUILDER = {record.TextChannel: TextChannelBuilder,
-                         record.VoiceChannel: VoiceChannelBuilder}
-        
         dummy = BuildDummy()
         for channel in self.category.channels:
             builder = CHANNEL_BUILDER[type(channel)](channel, self.webhooks, self.bot)
@@ -310,7 +314,8 @@ class GuildBuilder(Builder):
     
     def _get_edits(self):
         return {"name": self.guild.name}
-
+    
+    @logger.catch()
     async def build(self, guild: discord.Guild):
         print("GuildBuilder build()")
         await guild.edit(** self._get_edits())
@@ -323,4 +328,8 @@ class GuildBuilder(Builder):
             dummy = await builder.build(guild)
             await dummy.eval(self.webhooks)
         
-        await self.webhooks.release_webhooks()
+        for channel in self.guild.free_channels:
+            builder = CHANNEL_BUILDER[type(channel)](channel, self.webhooks, self.bot)
+            dummy = await builder.build(guild, None)
+            await dummy.eval(self.webhooks)
+        

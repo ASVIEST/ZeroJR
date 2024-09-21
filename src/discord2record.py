@@ -250,5 +250,11 @@ class GuildConverter(Converter):
 
         for category in self._guild.categories:
             await gen.with_category(CategoryConverter(category).gen_func)
+        
+        for channel in self._guild.channels:
+            if channel.category is None:
+                match channel:
+                    case discord.TextChannel(): await gen.with_text_channel(TextChannelConverter(channel).gen_func)
+                    case discord.VoiceChannel(): await gen.with_voice_channel(VoiceChannelConverter(channel).gen_func)
 
         return gen

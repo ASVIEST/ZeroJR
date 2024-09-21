@@ -61,7 +61,6 @@ async def aiodump(tree):
 
 @my_console.command()
 async def create(guild: discord.Guild):
-    
     start_time = time.time()
     gen = gen_record.GuildGen()
     gen = await GuildConverter(guild).convert(gen)

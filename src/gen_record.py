@@ -361,11 +361,13 @@ class GuildGen:
     _name: str
     _emojis: list[record.Emoji]
     _categories: list[record.Category]
+    _channels: list[record.TextChannel | record.VoiceChannel]
 
     def __init__(self):
         self._name = "default"
         self._emojis = []
         self._categories = []
+        self._channels = []
 
     @async_chain.method
     async def with_name(self, name: str):
@@ -387,9 +389,24 @@ class GuildGen:
         return self
     
     @async_chain.method
+    async def with_text_channel(self, gen_func):
+        gen = TextChannelGen()
+        gen = await gen_func(gen)
+        self._channels.append(await gen.get_result())
+        return self
+    
+    @async_chain.method
+    async def with_voice_channel(self, gen_func):
+        gen = VoiceChannelGen()
+        gen = await gen_func(gen)
+        self._channels.append(await gen.get_result())
+        return self
+    
+    @async_chain.method
     async def get_result(self):
         return record.Guild(
             name = self._name,
             emojis = tuple(self._emojis),
-            categories = tuple(self._categories)
+            categories = tuple(self._categories),
+            free_channels = tuple(self._channels)
         )
