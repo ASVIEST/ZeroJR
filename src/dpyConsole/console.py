@@ -10,6 +10,7 @@ import shlex
 import threading
 
 from dpyConsole.errors import CommandNotFound, ExtensionError
+from dpyConsole.completer import get_completes, CompleteInfo
 
 logger = logging.getLogger("dpyConsole")
 
@@ -35,12 +36,9 @@ class Console:
     def init_linenoise(self):
         def complete(s):
             if len(s) == 0: return None
-            console_in = shlex.split(s)
-            completes = []
-            if len(console_in) == 1:
-                for k in self.__commands__.keys():
-                    if k.startswith(s):
-                        completes.append(k)
+            info = CompleteInfo(self, self.client, self.client.loop)
+            completes = get_completes(s, info)
+            
             return tuple(completes)
 
         self.ln = linenoise.linenoise()

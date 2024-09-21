@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 from dpyConsole import Console
 from rich import inspect
 from enum import Enum, auto, StrEnum
+from utils import PickleFilePath
 import time
 
 import record
@@ -43,8 +44,8 @@ my_console = Console(bot)
 
 #Эта шиза снизу для распознавания консолью всякой шизы вроде ClearKind
 def path_convert(param):
-    return Path(param)
-my_console.converter.add_converter(Path, path_convert) # What the fuck?
+    return PickleFilePath.__value__(param)
+my_console.converter.add_converter(PickleFilePath, path_convert) # What the fuck?
 
 
 def clear_kind_convert(param):
@@ -94,7 +95,7 @@ async def clear(guild: discord.Guild, clear_kind: ClearKind = ClearKind.ALL):
 
 
 @my_console.command()
-async def load(guild: discord.Guild, file_name: Path):
+async def load(guild: discord.Guild, file_name: PickleFilePath):
     with open(file_name, "rb") as file:
         assert file.read(4) == b"DPKL"
         guild_from_file = pickle.load(file)
