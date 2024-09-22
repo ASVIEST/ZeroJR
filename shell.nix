@@ -17,5 +17,7 @@ pkgs.mkShell {
     async_chain
     python-dotenv
     loguru
+    prompt-toolkit
+    rich
   ];
 }

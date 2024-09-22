@@ -44,9 +44,7 @@ def get_type_completes(x, complete_info: CompleteInfo) -> list[str]:
 @get_type_completes.register(PickleFilePath)
 def _(s: str, _):
     completes = []
-    path = Path(s)
-    
-    for file in Path.cwd().glob(f"{path}*"):
+    for file in Path.cwd().glob(f"{s.strip()}*"):
         if file.is_dir(): continue
         with open(file, "br") as f:
             data = f.read()
@@ -80,9 +78,10 @@ def get_completes(s: str, complete_info: CompleteInfo):
         console_in = shlex.split(s)
     except:
         return []
-
+    if len(console_in) == 0: return get_keyword_completes("", complete_info)
     completes = []
-    if len(console_in) == 1:
+    offset = s[-1].startswith((' ','\t'))
+    if len(console_in) + offset == 1:
         completes = get_keyword_completes(console_in[0], complete_info)
     else:
         commands = complete_info.console.__commands__
@@ -90,20 +89,27 @@ def get_completes(s: str, complete_info: CompleteInfo):
             return []
         command = commands[console_in[0]]
         signature = inspect.signature(command.__callback__)
-
-        if len(console_in) - 1 > len(signature.parameters):
+        
+        if len(console_in) + offset - 1 > len(signature.parameters):
             return []
         
         params = tuple(signature.parameters.values())
-        last_param = params[len(console_in) - 2]
+        last_param = params[len(console_in) - 2 + offset]
         if not last_param:
             return []
         
         typ = last_param.annotation
-        prelude = ' '.join(console_in[:-1])
-        completes = [
-            prelude + ' ' + complete
-            for complete in
-            get_type_completes(typ, console_in[-1], complete_info)
-        ]
+        if offset:
+            completes = get_type_completes(typ, "", complete_info)
+        else:
+            completes = get_type_completes(typ, console_in[-1], complete_info)
     return completes
+
+from prompt_toolkit.completion import Completer, Completion
+class ConsoleCompleter(Completer):
+    def __init__(self, complete_info: CompleteInfo):
+        self.complete_info = complete_info
+    def get_completions(self, document, complete_event):
+        line = document.current_line_before_cursor
+        for complete in get_completes(line, self.complete_info):
+            yield Completion(complete, start_position=-len(document.get_word_before_cursor()))

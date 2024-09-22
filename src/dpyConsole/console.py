@@ -8,13 +8,22 @@ import logging
 import traceback
 import shlex
 import threading
+from discord import __title__ as dpy_impl_name
+from discord import __version__ as dpy_version
+
 
 from dpyConsole.errors import CommandNotFound, ExtensionError
-from dpyConsole.completer import get_completes, CompleteInfo
+from dpyConsole.completer import get_completes, CompleteInfo, ConsoleCompleter
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.shortcuts import CompleteStyle
+from prompt_toolkit.cursor_shapes import CursorShape
+from prompt_toolkit.formatted_text import ANSI, HTML
+from prompt_toolkit.styles import Style
 
 logger = logging.getLogger("dpyConsole")
 
-import py_linenoise.linenoise as linenoise
 
 class Console:
     """
@@ -30,24 +39,6 @@ class Console:
         self.converter = kwargs.get("converter", Converter(client))
         self.__extensions = {}
         self.__cogs = {}
-    
-        
- 
-    def init_linenoise(self):
-        def complete(s):
-            if len(s) == 0: return None
-            info = CompleteInfo(self, self.client, self.client.loop)
-            completes = get_completes(s, info)
-            
-            return tuple(completes)
-
-        self.ln = linenoise.linenoise()
-        self.ln.history_load("history.txt")
-        self.ln.set_hotkey("?")
-        self.ln.set_multiline(True)
-
-        self.ln.set_completion_callback(complete)
-
 
     def add_console_cog(self, obj):
         if isinstance(obj, Cog):
@@ -112,6 +103,20 @@ class Console:
             self.__extensions[path] = module
             sys.modules.update(old_modules)
             raise
+    
+    def init_prompt_session(self):
+        info = CompleteInfo(self, self.client, self.client.loop)
+        self.prompt_session = PromptSession(
+            "-> ",
+            history=FileHistory("history.txt"),
+            completer=ConsoleCompleter(info),
+            mouse_support=True,
+            # complete_style=CompleteStyle.READLINE_LIKE,
+            cursor=CursorShape.BLINKING_BEAM,
+            bottom_toolbar= HTML(
+                f'(html) <b>{dpy_impl_name}</b> <style bg="ansired">{dpy_version}</style>'
+            )
+        )
 
     def listen(self):
         """
@@ -120,16 +125,12 @@ class Console:
         :return:
         """
         logger.info("Console is ready and is listening for commands\n")
-        self.init_linenoise()
+        self.init_prompt_session()
         while True:
             try:
-                line = self.ln.read("-> ")
+                line = self.prompt_session.prompt("-> ")
                 if line is None:
                     break
-                
-                if len(line) > 0:
-                    self.ln.history_add(line)
-                    self.ln.history_save("history.txt")
                 
                 console_in = shlex.split(line) # INP
                 if len(console_in) == 0:
